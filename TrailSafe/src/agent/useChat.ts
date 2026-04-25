@@ -3,12 +3,14 @@ import { useCallback, useRef, useState } from 'react';
 import type { AppState, ChatMessage } from '../shared/types';
 import { sendMessage } from './survivalAgent';
 
-const WELCOME_MESSAGE: ChatMessage = {
-  id: 'welcome',
-  role: 'assistant',
-  text: "Hi! I'm your AI guide. I can help you navigate back to safety using your offline map and location history. How can I assist you?",
-  timestamp: Date.now(),
-};
+const WELCOME_TEXT =
+  "Hi! I'm your AI guide. I can help you navigate back to safety using your offline map and location history. How can I assist you?";
+
+function makeWelcomeMessage(): ChatMessage[] {
+  return [
+    { id: 'welcome', role: 'assistant', text: WELCOME_TEXT, timestamp: Date.now() },
+  ];
+}
 
 const DEFAULT_APP_STATE: AppState = {
   position: null,
@@ -25,7 +27,7 @@ function makeId(): string {
 
 export function useChat(appState?: AppState) {
   const state = appState ?? DEFAULT_APP_STATE;
-  const [messages, setMessages] = useState<ChatMessage[]>([WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState<ChatMessage[]>(makeWelcomeMessage);
   const [isLoading, setIsLoading] = useState(false);
   const stateRef = useRef(state);
   stateRef.current = state;
