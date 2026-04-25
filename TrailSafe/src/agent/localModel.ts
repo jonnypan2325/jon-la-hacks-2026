@@ -33,7 +33,7 @@ async function checkHealthOnce(): Promise<void> {
 export async function callLocalModel(prompt: string): Promise<string> {
   await checkHealthOnce();
   if (!healthy) {
-    throw new LocalModelError('local server unavailable');
+    throw new LocalModelError('local model unavailable');
   }
 
   try {
