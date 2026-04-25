@@ -29,13 +29,17 @@ export function useChat(appState?: AppState) {
   const state = appState ?? DEFAULT_APP_STATE;
   const [messages, setMessages] = useState<ChatMessage[]>(makeWelcomeMessage);
   const [isLoading, setIsLoading] = useState(false);
+  const busyRef = useRef(false);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
   const stateRef = useRef(state);
   stateRef.current = state;
 
   const send = useCallback(
     async (text: string) => {
       const trimmed = text.trim();
-      if (!trimmed || isLoading) return;
+      if (!trimmed || busyRef.current) return;
+      busyRef.current = true;
 
       const userMsg: ChatMessage = {
         id: makeId(),
@@ -48,7 +52,7 @@ export function useChat(appState?: AppState) {
       setIsLoading(true);
 
       try {
-        const allMessages = [...messages, userMsg];
+        const allMessages = [...messagesRef.current, userMsg];
         const reply = await sendMessage(trimmed, stateRef.current, allMessages);
 
         const assistantMsg: ChatMessage = {
@@ -69,10 +73,11 @@ export function useChat(appState?: AppState) {
 
         setMessages((prev) => [...prev, errorMsg]);
       } finally {
+        busyRef.current = false;
         setIsLoading(false);
       }
     },
-    [isLoading, messages],
+    [],
   );
 
   return { messages, isLoading, send };
