@@ -36,12 +36,13 @@ export async function callLocalModel(prompt: string): Promise<string> {
     throw new LocalModelError('local model unavailable');
   }
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const raw = await Promise.race([
       generate(prompt),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new LocalModelError('local model timed out')), TIMEOUT_MS),
-      ),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new LocalModelError('local model timed out')), TIMEOUT_MS);
+      }),
     ]);
 
     if (!raw) {
@@ -54,5 +55,7 @@ export async function callLocalModel(prompt: string): Promise<string> {
     throw new LocalModelError(
       err instanceof Error ? `local model: ${err.message}` : 'local model failed',
     );
+  } finally {
+    clearTimeout(timer);
   }
 }
