@@ -1,3 +1,5 @@
+import { generate } from '../zetic/ZeticMLange';
+
 export class LocalModelError extends Error {
   constructor(message: string) {
     super(message);
@@ -5,7 +7,6 @@ export class LocalModelError extends Error {
   }
 }
 
-const LOCAL_URL = 'http://localhost:8080/generate';
 const TIMEOUT_MS = 10_000;
 const ARTIFACT_REGEX = /<\|[^|>]+\|>|<\/?s>|\[\/?INST\]/g;
 
@@ -32,26 +33,18 @@ async function checkHealthOnce(): Promise<void> {
 export async function callLocalModel(prompt: string): Promise<string> {
   await checkHealthOnce();
   if (!healthy) {
-    throw new LocalModelError('local server unavailable');
+    throw new LocalModelError('local model unavailable');
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const res = await fetch(LOCAL_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, max_tokens: 200 }),
-      signal: controller.signal,
-    });
+    const raw = await Promise.race([
+      generate(prompt),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new LocalModelError('local model timed out')), TIMEOUT_MS);
+      }),
+    ]);
 
-    if (!res.ok) {
-      throw new LocalModelError(`local model HTTP ${res.status}`);
-    }
-
-    const data = (await res.json()) as { text?: string; output?: string; response?: string };
-    const raw = data.text ?? data.output ?? data.response ?? '';
     if (!raw) {
       throw new LocalModelError('local model returned empty response');
     }
