@@ -36,6 +36,6 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
-# generated native folders
-# /ios — tracked: contains custom Zetic native modules
+# generated native folders (recreated by expo prebuild)
+/ios
 /android
