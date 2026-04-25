@@ -10,7 +10,7 @@
  *   6. Updates the Podfile deployment target
  */
 
-const { withXcodeProject, withDangerousMod } = require('@expo/config-plugins');
+const { withXcodeProject, withDangerousMod, withInfoPlist } = require('@expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -19,6 +19,20 @@ const SPM_VERSION = '1.6.0';
 const IOS_DEPLOYMENT_TARGET = '16.0';
 
 function withZeticMLange(config) {
+  // Phase 0: Inject ZeticPersonalKey from ZETIC_PERSONAL_KEY env var into Info.plist
+  config = withInfoPlist(config, (config) => {
+    const key = process.env.ZETIC_PERSONAL_KEY;
+    if (!key || key.trim() === '') {
+      throw new Error(
+        'ZETIC_PERSONAL_KEY environment variable is not set. ' +
+        'Copy TrailSafe/.env.example to TrailSafe/.env and add your Zetic personal key, ' +
+        'then re-run expo prebuild.',
+      );
+    }
+    config.modResults.ZeticPersonalKey = key;
+    return config;
+  });
+
   // Phase 1: Copy native files and patch Podfile (runs after Xcode project mods)
   config = withDangerousMod(config, [
     'ios',
@@ -89,9 +103,7 @@ function withZeticMLange(config) {
       }
     }
 
-    // --- Add SPM package dependency ---
-    const pkgRefUuid = project.generateUuid();
-    const pkgDepUuid = project.generateUuid();
+    // --- Add SPM package dependency (idempotent) ---
 
     // Initialize SPM sections if missing
     if (!project.hash.project.objects.XCRemoteSwiftPackageReference) {
@@ -101,45 +113,65 @@ function withZeticMLange(config) {
       project.hash.project.objects.XCSwiftPackageProductDependency = {};
     }
 
-    // Remote package reference
-    project.hash.project.objects.XCRemoteSwiftPackageReference[pkgRefUuid] = {
-      isa: 'XCRemoteSwiftPackageReference',
-      repositoryURL: SPM_URL,
-      requirement: {
-        kind: 'exactVersion',
-        version: SPM_VERSION,
-      },
-    };
-    project.hash.project.objects.XCRemoteSwiftPackageReference[`${pkgRefUuid}_comment`] =
-      'XCRemoteSwiftPackageReference "ZeticMLangeiOS"';
+    const existingPackageRefs = project.hash.project.objects.XCRemoteSwiftPackageReference;
+    const existingPkgDeps = project.hash.project.objects.XCSwiftPackageProductDependency;
 
-    // Package product dependency
-    project.hash.project.objects.XCSwiftPackageProductDependency[pkgDepUuid] = {
-      isa: 'XCSwiftPackageProductDependency',
-      package: pkgRefUuid,
-      productName: 'ZeticMLange',
-    };
-    project.hash.project.objects.XCSwiftPackageProductDependency[`${pkgDepUuid}_comment`] =
-      'ZeticMLange';
+    // Find or create the remote package reference
+    let pkgRefUuid = Object.keys(existingPackageRefs).find((key) => {
+      const ref = existingPackageRefs[key];
+      return typeof ref === 'object' && ref.repositoryURL === SPM_URL;
+    });
+    if (!pkgRefUuid) {
+      pkgRefUuid = project.generateUuid();
+      existingPackageRefs[pkgRefUuid] = {
+        isa: 'XCRemoteSwiftPackageReference',
+        repositoryURL: SPM_URL,
+        requirement: {
+          kind: 'exactVersion',
+          version: SPM_VERSION,
+        },
+      };
+      existingPackageRefs[`${pkgRefUuid}_comment`] = 'XCRemoteSwiftPackageReference "ZeticMLangeiOS"';
+    }
 
-    // Add package reference to the root project object
+    // Find or create the package product dependency
+    let pkgDepUuid = Object.keys(existingPkgDeps).find((key) => {
+      const dep = existingPkgDeps[key];
+      return typeof dep === 'object' && dep.productName === 'ZeticMLange';
+    });
+    if (!pkgDepUuid) {
+      pkgDepUuid = project.generateUuid();
+      existingPkgDeps[pkgDepUuid] = {
+        isa: 'XCSwiftPackageProductDependency',
+        package: pkgRefUuid,
+        productName: 'ZeticMLange',
+      };
+      existingPkgDeps[`${pkgDepUuid}_comment`] = 'ZeticMLange';
+    }
+
+    // Add package reference to the root project object (only if not already present)
     const rootProject = project.getFirstProject().firstProject;
     if (!rootProject.packageReferences) {
       rootProject.packageReferences = [];
     }
-    rootProject.packageReferences.push({
-      value: pkgRefUuid,
-      comment: 'XCRemoteSwiftPackageReference "ZeticMLangeiOS"',
-    });
+    const alreadyInPackageRefs = rootProject.packageReferences.some((r) => r.value === pkgRefUuid);
+    if (!alreadyInPackageRefs) {
+      rootProject.packageReferences.push({
+        value: pkgRefUuid,
+        comment: 'XCRemoteSwiftPackageReference "ZeticMLangeiOS"',
+      });
+    }
 
-    // Add product dependency to the app target
+    // Add product dependency to the app target (only if not already present)
     const targetUuid = project.getFirstTarget().uuid;
     const nativeTarget = project.hash.project.objects.PBXNativeTarget[targetUuid];
     if (nativeTarget) {
       if (!nativeTarget.packageProductDependencies) {
         nativeTarget.packageProductDependencies = [];
       }
-      nativeTarget.packageProductDependencies.push(pkgDepUuid);
+      if (!nativeTarget.packageProductDependencies.includes(pkgDepUuid)) {
+        nativeTarget.packageProductDependencies.push(pkgDepUuid);
+      }
     }
 
     return config;

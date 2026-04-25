@@ -9,15 +9,20 @@ class ZeticMLangeModule: NSObject {
 
   @objc
   func generate(_ prompt: String, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    guard let personalKey = Bundle.main.infoDictionary?["ZeticPersonalKey"] as? String,
+          !personalKey.isEmpty else {
+      reject("ZETIC_CONFIG_ERROR", "ZeticPersonalKey not found in Info.plist. Set the ZETIC_PERSONAL_KEY environment variable before running expo prebuild.", nil)
+      return
+    }
     DispatchQueue.global(qos: .userInitiated).async {
       do {
         if self.model == nil {
           self.model = try ZeticMLangeLLMModel(
-            personalKey: "dev_37f0eac625e14f72a30c6c36b123ad0c",
+            personalKey: personalKey,
             name: "Steve/Qwen3.5-2B",
             version: 1,
             modelMode: LLMModelMode.RUN_AUTO,
-            onDownload: { progress in }
+            onDownload: { _ in }
           )
         }
 
@@ -41,11 +46,16 @@ class ZeticMLangeModule: NSObject {
 
   @objc
   func healthCheck(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    guard let personalKey = Bundle.main.infoDictionary?["ZeticPersonalKey"] as? String,
+          !personalKey.isEmpty else {
+      reject("ZETIC_CONFIG_ERROR", "ZeticPersonalKey not found in Info.plist. Set the ZETIC_PERSONAL_KEY environment variable before running expo prebuild.", nil)
+      return
+    }
     DispatchQueue.global(qos: .userInitiated).async {
       do {
         if self.model == nil {
           self.model = try ZeticMLangeLLMModel(
-            personalKey: "dev_37f0eac625e14f72a30c6c36b123ad0c",
+            personalKey: personalKey,
             name: "Steve/Qwen3.5-2B",
             version: 1,
             modelMode: LLMModelMode.RUN_AUTO,
